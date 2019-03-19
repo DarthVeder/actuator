@@ -63,7 +63,7 @@ class actuatorFvPatchVectorField
         // Position of the actuator center
         vector xa_;
         // Maximum force (N)
-        scalar fn_max_;
+        scalar fn_tot_;
 
 
 public:
@@ -182,12 +182,12 @@ public:
             // - Return maximum normal force (N)
             virtual const scalar& fnMax() const
             {
-                return fn_max_;
+                return fn_tot_;
             }
 
             virtual  scalar& fnMax()
             {
-                return fn_max_;
+                return fn_tot_;
             }
 
 

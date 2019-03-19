@@ -46,7 +46,7 @@ actuatorFvPatchVectorField
     ra_(1.0),
     nc_(1.0),
     xa_(Zero),
-    fn_max_(0.0)
+    fn_tot_(0.0)
 {
     fvPatchVectorField::operator=(patchInternalField());
     gradient() = Zero;
@@ -67,7 +67,7 @@ actuatorFvPatchVectorField
     ra_(tdpvf.ra_),
     nc_(tdpvf.nc_),
     xa_(tdpvf.xa_),
-    fn_max_(tdpvf.fn_max_)
+    fn_tot_(tdpvf.fn_tot_)
 {}
 
 
@@ -84,7 +84,7 @@ actuatorFvPatchVectorField
     ra_(readScalar(dict.lookup("ra"))),
     nc_(readScalar(dict.lookup("nc"))),
     xa_(vector(dict.lookup("xa"))),
-    fn_max_(readScalar(dict.lookup("fn_max")))
+    fn_tot_(readScalar(dict.lookup("fn_tot")))
 {
     fvPatchVectorField::operator=(patchInternalField());
     gradient() = Zero;
@@ -102,7 +102,7 @@ actuatorFvPatchVectorField
     ra_(tdpvf.ra_),
     nc_(tdpvf.nc_),
     xa_(tdpvf.xa_),
-    fn_max_(tdpvf.fn_max_)
+    fn_tot_(tdpvf.fn_tot_)
 {}
 
 
@@ -118,7 +118,7 @@ actuatorFvPatchVectorField
     ra_(tdpvf.ra_),
     nc_(tdpvf.nc_),
     xa_(tdpvf.xa_),
-    fn_max_(tdpvf.fn_max_)
+    fn_tot_(tdpvf.fn_tot_)
 {}
 
 
@@ -177,32 +177,41 @@ void actuatorFvPatchVectorField::updateCoeffs()
     }
     scalarField twoMuLambda(2*mu + lambda);
     vectorField n(patch().nf());
+    scalarField Sf_(patch().magSf());
     const fvPatchField<symmTensor>& sigmaD =
         patch().lookupPatchField<volSymmTensorField, symmTensor>("sigmaD");
 	vectorField snGrad = fvPatchField<vector>::snGrad();
 
     vectorField Cf_ = patch().Cf();   
     scalar t_burst = nc_/f0_; // s                     
-    scalar As = pi*ra_*ra_;
-    scalar pn_max = fn_max_/As;
+
+    // Computing total area (m^2) on which the actuator force is used.
+    // NOTE To save computation time maybe it could be passed by user?  
+    scalar As = 0.0;
+    scalarField dist_Cf_xa(Cf_.size()); // this should set only length and not value
+    forAll(Sf_, i)
+    {
+        dist_Cf_xa[i] = 0.0;
+  	    for (int j=0; j<3; j++) 
+   	    {
+			dist_Cf_xa[i] += (Cf_[i][j]-xa_[j]) * (Cf_[i][j]-xa_[j]);
+	   	}
+        dist_Cf_xa[i] = sqrt(dist_Cf_xa[i]);
+        if (dist_Cf_xa[i] <= ra_)
+        {
+            As += Sf_[i];
+        }
+    }
 
     scalar fvalue_ = 0.0;
-    scalar dist_Cf_xa = 0.0;
     forAll(Cf_, i)
     {
         //cout<<Cf_[i][0]<<" "<<Cf_[i][1]<<" "<<Cf_[i][2]<<"\n";
-        dist_Cf_xa = 0.0;
-  	for (int j=0; j<3; j++) 
-   	{
-			dist_Cf_xa += (Cf_[i][j]-xa_[j]) * (Cf_[i][j]-xa_[j]);
-	   	}
-    	dist_Cf_xa = sqrt(dist_Cf_xa);
 		// Computing sine-burst, given frequency_ and ncycles_
     	fvalue_ = 0.0;
-    	if (t<=t_burst && dist_Cf_xa <= ra_)
+    	if (t<=t_burst && dist_Cf_xa[i] <= ra_)
     	{ // NEUMANN
-            cout<<"..........\n";	
-        	fvalue_ = pn_max * sin(2.0*pi*f0_*t) * pow(sin(pi*t/t_burst),2.0);
+        	fvalue_ = (fn_tot_/As) * sin(2.0*pi*f0_*t) * pow(sin(pi*t/t_burst),2.0);
 			gradient()[i] = ( - fvalue_*n[i]/rho[i] 
 						      + twoMuLambda[i]*snGrad[i] - (n[i] & sigmaD[i]) 
 					        )/twoMuLambda[i];
@@ -215,7 +224,7 @@ void actuatorFvPatchVectorField::updateCoeffs()
 
 		}
     }
-    
+
     fixedGradientFvPatchVectorField::updateCoeffs();
 }
 
@@ -227,7 +236,7 @@ void actuatorFvPatchVectorField::write(Ostream& os) const
     os.writeKeyword("ra") << ra_ << token::END_STATEMENT << nl;
     os.writeKeyword("nc") << nc_ << token::END_STATEMENT << nl;
     os.writeKeyword("xa") << xa_ << token::END_STATEMENT << nl;
-    os.writeKeyword("fn_max") << fn_max_ << token::END_STATEMENT << nl;
+    os.writeKeyword("fn_tot") << fn_tot_ << token::END_STATEMENT << nl;
     writeEntry("value", os);
 }
 

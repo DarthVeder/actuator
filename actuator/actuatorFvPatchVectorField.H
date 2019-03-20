@@ -25,9 +25,46 @@ Class
     Foam::actuatorFvPatchVectorField
 
 Description
-    Actuator force acting normal to the patch and defined as a sine burst. 
-    It is modelled as a circular disk on the patch with position xa_ and
-    radius ra_. The sine burst requires f0 and nc.
+    Actuator force acting normal (p*n) to the patch and defined (i) as a pressure 
+    sine burst or (ii) read from a file. 
+    It is modelled as a circular disk (pi*ra_^2) on the patch with position xa_
+    and radius ra_. The sine burst requires f0 and nc. The actual area is computed
+    at run time, to allow for smaller sections of the actuator being present on the 
+    patch. 
+
+    Boundary format for sine burst:
+    
+    patch_name
+    {
+        type            actuator;
+        f0              20000; // (Hz)
+        nc              4; // (1)
+        fn_tot          -1; // (N), total force. (+) is parallel with the normal() 
+        ra              0.019478; // disk radius, (m)
+        xa              ( 0 0.0031 0.0015 ); // disk center, (m)
+        value           uniform (0 0 0);
+    }
+ 
+
+    Boundary format for file:
+        patch_name
+    {
+        type            actuator;
+        ra              0.019478; // disk radius, (m)
+        xa              ( 0 0.0031 0.0015 ); // disk center, (m)
+        pressureValue
+        {
+            type csvFile; // file ha n rows with  "time value"
+            nHeaderLine 0;
+            refColumn 0;
+            componentColumns (1);
+            separator " ";
+            mergeSeparators yes;
+            file "<constant>/force.txt";
+
+        }
+        value           uniform (0 0 0);
+    }
 
 SourceFiles
     actuatorFvPatchVectorField.C
@@ -38,6 +75,8 @@ SourceFiles
 #define actuatorFvPatchVectorField_H
 #include "fvPatchFields.H"
 #include "fixedGradientFvPatchFields.H"
+#include "fixedValueFvPatchFields.H"
+#include "Function1.H"
 
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
@@ -54,17 +93,20 @@ class actuatorFvPatchVectorField
 {
 
     // Private Data
-        // Frequency of sine burst (Hz)
+        //- reader for pressure data in external file
+        autoPtr<Function1<scalar>> pressureFile_;
+        //- reading pressure from file
+        bool readPressure_;
+        //- Frequency of sine burst (Hz)
         scalar f0_;
-        // Radius of actuator (m)
+        //- Radius of actuator (m)
         scalar ra_;
-        // Number of cycles (1)
+        //- Number of cycles (1)
         scalar nc_;
-        // Position of the actuator center
+        //- Position of the actuator center
         vector xa_;
-        // Maximum force (N)
+        //- Maximum force (N)
         scalar fn_tot_;
-
 
 public:
 
@@ -212,6 +254,12 @@ public:
 
         //- Write
         virtual void write(Ostream&) const;
+
+        //- Read from file
+        bool readPressureFromFile()
+        {
+            return readPressure_;
+        }
 };
 
 

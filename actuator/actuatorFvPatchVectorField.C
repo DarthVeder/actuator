@@ -42,6 +42,8 @@ actuatorFvPatchVectorField
 )
 :
     fixedGradientFvPatchVectorField(p, iF),
+    //pressureFile_(),
+    //readPressure_(false),
     f0_(1.0),
     ra_(1.0),
     nc_(1.0),
@@ -63,6 +65,8 @@ actuatorFvPatchVectorField
 )
 :
     fixedGradientFvPatchVectorField(tdpvf, p, iF, mapper),
+    //pressureFile_(tdpvf.pressureFile_),
+    //readPressure_(false),
     f0_(tdpvf.f0_),
     ra_(tdpvf.ra_),
     nc_(tdpvf.nc_),
@@ -80,12 +84,28 @@ actuatorFvPatchVectorField
 )
 :
     fixedGradientFvPatchVectorField(p, iF),
-    f0_(readScalar(dict.lookup("f0"))),
+    //pressureFile_(),
+    //readPressure_(false),
+    f0_(1.0),
     ra_(readScalar(dict.lookup("ra"))),
-    nc_(readScalar(dict.lookup("nc"))),
+    nc_(1.0),
     xa_(vector(dict.lookup("xa"))),
-    fn_tot_(readScalar(dict.lookup("fn_tot")))
+    fn_tot_(0.0)
 {
+    
+    if (dict.found("pressureValue") == 1)
+    {
+        pressureFile_ = Function1<scalar>::New("pressureValue", dict);
+        readPressure_ = true;
+    }
+    else
+    {
+        f0_ = readScalar(dict.lookup("f0"));
+        nc_ = readScalar(dict.lookup("nc"));
+        fn_tot_ = readScalar(dict.lookup("fn_tot"));
+        readPressure_ = false;
+    }
+    
     fvPatchVectorField::operator=(patchInternalField());
     gradient() = Zero;
 }
@@ -98,6 +118,8 @@ actuatorFvPatchVectorField
 )
 :
     fixedGradientFvPatchVectorField(tdpvf),
+    //pressureFile_(tdpvf.pressureFile_),
+    //readPressure_(tdpvf.readPressure_),
     f0_(tdpvf.f0_),
     ra_(tdpvf.ra_),
     nc_(tdpvf.nc_),
@@ -114,6 +136,8 @@ actuatorFvPatchVectorField
 )
 :
     fixedGradientFvPatchVectorField(tdpvf, iF),
+    //pressureFile_(tdpvf.pressureFile_),
+    //readPressure_(tdpvf.readPressure_),
     f0_(tdpvf.f0_),
     ra_(tdpvf.ra_),
     nc_(tdpvf.nc_),
@@ -169,7 +193,6 @@ void actuatorFvPatchVectorField::updateCoeffs()
     scalar t = db().time().value();
     const scalar pi = constant::mathematical::pi;
 
-
     if (mechanicalProperties.get<bool>("planeStress"))
     {
         lambda = nu*E/((1.0 + nu)*(1.0 - nu));
@@ -181,14 +204,12 @@ void actuatorFvPatchVectorField::updateCoeffs()
     const fvPatchField<symmTensor>& sigmaD =
         patch().lookupPatchField<volSymmTensorField, symmTensor>("sigmaD");
 	vectorField snGrad = fvPatchField<vector>::snGrad();
-
     vectorField Cf_ = patch().Cf();   
-    scalar t_burst = nc_/f0_; // s                     
-
+    
     // Computing total area (m^2) on which the actuator force is used.
-    // NOTE To save computation time maybe it could be passed by user?  
-    scalar As = 0.0;
-    scalarField dist_Cf_xa(Cf_.size()); // this should set only length and not value
+    // NOTE To save computation time, maybe could it be passed by user?  
+    scalar As = 0.0; // m^2
+    scalarField dist_Cf_xa(Cf_.size()); // m
     forAll(Sf_, i)
     {
         dist_Cf_xa[i] = 0.0;
@@ -202,23 +223,33 @@ void actuatorFvPatchVectorField::updateCoeffs()
             As += Sf_[i];
         }
     }
+    
+    scalar t_burst = nc_/f0_; // s
+    scalar pvalue_ = 0.0; 
 
-    scalar fvalue_ = 0.0;
+    if (readPressureFromFile())
+    {
+        pvalue_ = pressureFile_->value(t);
+    } 
+    else
+    {
+        if (t<=t_burst)
+        {
+            pvalue_ = (fn_tot_/As) * sin(2.0*pi*f0_*t) * pow(sin(pi*t/t_burst),2.0);
+        }
+    }
+
     forAll(Cf_, i)
     {
-        //cout<<Cf_[i][0]<<" "<<Cf_[i][1]<<" "<<Cf_[i][2]<<"\n";
-		// Computing sine-burst, given frequency_ and ncycles_
-    	fvalue_ = 0.0;
-    	if (t<=t_burst && dist_Cf_xa[i] <= ra_)
-    	{ // NEUMANN
-        	fvalue_ = (fn_tot_/As) * sin(2.0*pi*f0_*t) * pow(sin(pi*t/t_burst),2.0);
-			gradient()[i] = ( - fvalue_*n[i]/rho[i] 
+    	if (dist_Cf_xa[i] <= ra_)
+    	{ // NEUMANN, inside actuator disk
+			gradient()[i] = (   pvalue_*n[i]/rho[i] 
 						      + twoMuLambda[i]*snGrad[i] - (n[i] & sigmaD[i]) 
 					        )/twoMuLambda[i];
 
     	}	
 		else
-		{ // NEUMANN
+		{ // NEUMANN, outside actuator disk
 			gradient()[i] = ( twoMuLambda[i]*snGrad[i] - (n[i] & sigmaD[i]) 
 					        )/twoMuLambda[i];
 
@@ -232,11 +263,18 @@ void actuatorFvPatchVectorField::updateCoeffs()
 void actuatorFvPatchVectorField::write(Ostream& os) const
 {
     fvPatchVectorField::write(os);
-    os.writeKeyword("f0") << f0_ << token::END_STATEMENT << nl;
+    if (!readPressure_)
+    {
+        os.writeKeyword("f0") << f0_ << token::END_STATEMENT << nl;
+        os.writeKeyword("nc") << nc_ << token::END_STATEMENT << nl;
+        os.writeKeyword("fn_tot") << fn_tot_ << token::END_STATEMENT << nl;
+    }
+    else
+    {
+     //   pressureFile_->writeData(os);
+    }
     os.writeKeyword("ra") << ra_ << token::END_STATEMENT << nl;
-    os.writeKeyword("nc") << nc_ << token::END_STATEMENT << nl;
     os.writeKeyword("xa") << xa_ << token::END_STATEMENT << nl;
-    os.writeKeyword("fn_tot") << fn_tot_ << token::END_STATEMENT << nl;
     writeEntry("value", os);
 }
 

@@ -42,8 +42,7 @@ actuatorFvPatchVectorField
 )
 :
     fixedGradientFvPatchVectorField(p, iF),
-    //pressureFile_(),
-    //readPressure_(false),
+    pressureFile_(),
     f0_(1.0),
     ra_(1.0),
     nc_(1.0),
@@ -65,8 +64,7 @@ actuatorFvPatchVectorField
 )
 :
     fixedGradientFvPatchVectorField(tdpvf, p, iF, mapper),
-    //pressureFile_(tdpvf.pressureFile_),
-    //readPressure_(false),
+    pressureFile_(tdpvf.pressureFile_.clone()),
     f0_(tdpvf.f0_),
     ra_(tdpvf.ra_),
     nc_(tdpvf.nc_),
@@ -84,19 +82,19 @@ actuatorFvPatchVectorField
 )
 :
     fixedGradientFvPatchVectorField(p, iF),
-    //pressureFile_(),
-    //readPressure_(false),
+    pressureFile_(),
     f0_(1.0),
     ra_(readScalar(dict.lookup("ra"))),
     nc_(1.0),
     xa_(vector(dict.lookup("xa"))),
     fn_tot_(0.0)
 {
-    
+
     if (dict.found("pressureValue") == 1)
     {
         pressureFile_ = Function1<scalar>::New("pressureValue", dict);
         readPressure_ = true;
+       // this->evaluate();
     }
     else
     {
@@ -105,7 +103,7 @@ actuatorFvPatchVectorField
         fn_tot_ = readScalar(dict.lookup("fn_tot"));
         readPressure_ = false;
     }
-    
+
     fvPatchVectorField::operator=(patchInternalField());
     gradient() = Zero;
 }
@@ -118,8 +116,7 @@ actuatorFvPatchVectorField
 )
 :
     fixedGradientFvPatchVectorField(tdpvf),
-    //pressureFile_(tdpvf.pressureFile_),
-    //readPressure_(tdpvf.readPressure_),
+    pressureFile_(tdpvf.pressureFile_.clone()),
     f0_(tdpvf.f0_),
     ra_(tdpvf.ra_),
     nc_(tdpvf.nc_),
@@ -136,8 +133,7 @@ actuatorFvPatchVectorField
 )
 :
     fixedGradientFvPatchVectorField(tdpvf, iF),
-    //pressureFile_(tdpvf.pressureFile_),
-    //readPressure_(tdpvf.readPressure_),
+    pressureFile_(tdpvf.pressureFile_.clone()),
     f0_(tdpvf.f0_),
     ra_(tdpvf.ra_),
     nc_(tdpvf.nc_),
@@ -204,16 +200,16 @@ void actuatorFvPatchVectorField::updateCoeffs()
     const fvPatchField<symmTensor>& sigmaD =
         patch().lookupPatchField<volSymmTensorField, symmTensor>("sigmaD");
 	vectorField snGrad = fvPatchField<vector>::snGrad();
-    vectorField Cf_ = patch().Cf();   
-    
+    vectorField Cf_ = patch().Cf();
+
     // Computing total area (m^2) on which the actuator force is used.
-    // NOTE To save computation time, maybe could it be passed by user?  
+    // NOTE To save computation time, maybe could it be passed by user?
     scalar As = 0.0; // m^2
     scalarField dist_Cf_xa(Cf_.size()); // m
     forAll(Sf_, i)
     {
         dist_Cf_xa[i] = 0.0;
-  	    for (int j=0; j<3; j++) 
+  	    for (int j=0; j<3; j++)
    	    {
 			dist_Cf_xa[i] += (Cf_[i][j]-xa_[j]) * (Cf_[i][j]-xa_[j]);
 	   	}
@@ -223,14 +219,14 @@ void actuatorFvPatchVectorField::updateCoeffs()
             As += Sf_[i];
         }
     }
-    
+
     scalar t_burst = nc_/f0_; // s
-    scalar pvalue_ = 0.0; 
+    scalar pvalue_ = 0.0;
 
     if (readPressureFromFile())
     {
         pvalue_ = pressureFile_->value(t);
-    } 
+    }
     else
     {
         if (t<=t_burst)
@@ -243,14 +239,14 @@ void actuatorFvPatchVectorField::updateCoeffs()
     {
     	if (dist_Cf_xa[i] <= ra_)
     	{ // NEUMANN, inside actuator disk
-			gradient()[i] = (   pvalue_*n[i]/rho[i] 
-						      + twoMuLambda[i]*snGrad[i] - (n[i] & sigmaD[i]) 
+			gradient()[i] = (   pvalue_*n[i]/rho[i]
+						      + twoMuLambda[i]*snGrad[i] - (n[i] & sigmaD[i])
 					        )/twoMuLambda[i];
 
-    	}	
+    	}
 		else
 		{ // NEUMANN, outside actuator disk
-			gradient()[i] = ( twoMuLambda[i]*snGrad[i] - (n[i] & sigmaD[i]) 
+			gradient()[i] = ( twoMuLambda[i]*snGrad[i] - (n[i] & sigmaD[i])
 					        )/twoMuLambda[i];
 
 		}
@@ -271,7 +267,7 @@ void actuatorFvPatchVectorField::write(Ostream& os) const
     }
     else
     {
-     //   pressureFile_->writeData(os);
+        pressureFile_->writeData(os);
     }
     os.writeKeyword("ra") << ra_ << token::END_STATEMENT << nl;
     os.writeKeyword("xa") << xa_ << token::END_STATEMENT << nl;

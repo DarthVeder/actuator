@@ -43,9 +43,7 @@ actuatorFvPatchVectorField
 :
     fixedGradientFvPatchVectorField(p, iF),
     pressureFile_(),
-    f0_(1.0),
     ra_(1.0),
-    nc_(1.0),
     xa_(Zero),
     fn_tot_(0.0)
 {
@@ -62,25 +60,11 @@ actuatorFvPatchVectorField
 )
 :
     fixedGradientFvPatchVectorField(p, iF),
-    pressureFile_(),
-    f0_(1.0),
+    pressureFile_(Function1<scalar>::New("pressureValue", dict)),
     ra_(readScalar(dict.lookup("ra"))),
-    nc_(1.0),
     xa_(vector(dict.lookup("xa"))),
-    fn_tot_(0.0)
+    fn_tot_(readScalar(dict.lookup("fn_tot")))
 {
-
-    if (dict.found("pressureValue") == 1)
-    {
-        pressureFile_ = Function1<scalar>::New("pressureValue", dict);
-    }
-    else
-    {
-        f0_ = readScalar(dict.lookup("f0"));
-        nc_ = readScalar(dict.lookup("nc"));
-        fn_tot_ = readScalar(dict.lookup("fn_tot"));
-    }
-
     fvPatchVectorField::operator=(patchInternalField());
     gradient() = Zero;
 }
@@ -94,12 +78,9 @@ actuatorFvPatchVectorField
     const fvPatchFieldMapper& mapper
 )
 :
-    //fixedGradientFvPatchVectorField(tdpvf, p, iF, mapper),
-    fixedGradientFvPatchVectorField(p, iF), // Don't map
+    fixedGradientFvPatchVectorField(tdpvf, p, iF, mapper),
     pressureFile_(tdpvf.pressureFile_.clone()),
-    f0_(tdpvf.f0_),
     ra_(tdpvf.ra_),
-    nc_(tdpvf.nc_),
     xa_(tdpvf.xa_),
     fn_tot_(tdpvf.fn_tot_)
 {}
@@ -113,9 +94,7 @@ actuatorFvPatchVectorField
 :
     fixedGradientFvPatchVectorField(tdpvf),
     pressureFile_(tdpvf.pressureFile_.clone()),
-    f0_(tdpvf.f0_),
     ra_(tdpvf.ra_),
-    nc_(tdpvf.nc_),
     xa_(tdpvf.xa_),
     fn_tot_(tdpvf.fn_tot_)
 {}
@@ -130,9 +109,7 @@ actuatorFvPatchVectorField
 :
     fixedGradientFvPatchVectorField(tdpvf, iF),
     pressureFile_(tdpvf.pressureFile_.clone()),
-    f0_(tdpvf.f0_),
     ra_(tdpvf.ra_),
-    nc_(tdpvf.nc_),
     xa_(tdpvf.xa_),
     fn_tot_(tdpvf.fn_tot_)
 {}
@@ -183,7 +160,6 @@ void actuatorFvPatchVectorField::updateCoeffs()
     scalarField lambda(nu*E/((1.0 + nu)*(1.0 - 2.0*nu)));
     scalarField threeK(E/(1.0 - 2.0*nu));
     scalar t = db().time().value();
-    const scalar pi = constant::mathematical::pi;
 
     if (mechanicalProperties.get<bool>("planeStress"))
     {
@@ -215,22 +191,9 @@ void actuatorFvPatchVectorField::updateCoeffs()
             As += Sf_[i];
         }
     }
+    if (As == 0.0) As = GREAT;
 
-    scalar t_burst = nc_/f0_; // s
-    scalar pvalue_ = 0.0;
-
-    if (pressureFile_.valid())
-    {
-        pvalue_ = pressureFile_->value(t);
-    }
-    else
-    {
-        if (t<=t_burst)
-        {
-            pvalue_ = (fn_tot_/As) * sin(2.0*pi*f0_*t) * pow(sin(pi*t/t_burst),2.0);
-        }
-    }
-
+    const scalar pvalue_ = fn_tot_ * pressureFile_->value(t);
     forAll(Cf_, i)
     {
     	if (dist_Cf_xa[i] <= ra_)
@@ -254,17 +217,10 @@ void actuatorFvPatchVectorField::updateCoeffs()
 
 void actuatorFvPatchVectorField::write(Ostream& os) const
 {
+
     fvPatchVectorField::write(os);
-    if (!pressureFile_.valid())
-    {
-        os.writeKeyword("f0") << f0_ << token::END_STATEMENT << nl;
-        os.writeKeyword("nc") << nc_ << token::END_STATEMENT << nl;
-        os.writeKeyword("fn_tot") << fn_tot_ << token::END_STATEMENT << nl;
-    }
-    else
-    {
-        pressureFile_->writeData(os);
-    }
+    os.writeKeyword("fn_tot") << fn_tot_ << token::END_STATEMENT << nl;
+    pressureFile_->writeData(os);
     os.writeKeyword("ra") << ra_ << token::END_STATEMENT << nl;
     os.writeKeyword("xa") << xa_ << token::END_STATEMENT << nl;
     writeEntry("value", os);

@@ -25,29 +25,13 @@ Class
     Foam::actuatorFvPatchVectorField
 
 Description
-    Actuator force acting normal (p*n) to the patch and defined (i) as a pressure 
-    sine burst or (ii) read from a file. 
+    Actuator force acting normal (p*n) to the patch with p read from a file. 
     It is modelled as a circular disk (pi*ra_^2) on the patch with position xa_
-    and radius ra_. The sine burst requires f0 and nc. The actual area is computed
-    at run time, to allow for smaller sections of the actuator being present on the 
-    patch. 
-
-    Boundary format for sine burst:
-    
-    patch_name
-    {
-        type            actuator;
-        f0              20000; // (Hz)
-        nc              4; // (1)
-        fn_tot          -1; // (N), total force. (+) is parallel with the normal() 
-        ra              0.019478; // disk radius, (m)
-        xa              ( 0 0.0031 0.0015 ); // disk center, (m)
-        value           uniform (0 0 0);
-    }
- 
+    and radius ra_. The actual area is computed at run time, to allow for smaller 
+    sections of the actuator being present on the patch. 
 
     Boundary format for file:
-        patch_name
+    patch_name
     {
         type            actuator;
         ra              0.019478; // disk radius, (m)
@@ -95,12 +79,8 @@ class actuatorFvPatchVectorField
     // Private Data
         //- reader for pressure data in external file
         autoPtr<Function1<scalar>> pressureFile_;
-        //- Frequency of sine burst (Hz)
-        scalar f0_;
         //- Radius of actuator (m)
         scalar ra_;
-        //- Number of cycles (1)
-        scalar nc_;
         //- Position of the actuator center
         vector xa_;
         //- Maximum force (N)
@@ -189,26 +169,6 @@ public:
                 return xa_;
             }
 
-            // - Return sine burst frequency (Hz)
-            virtual const scalar& f0() const
-            {
-                return f0_;
-            }
-
-            virtual  scalar& f0()
-            {
-                return f0_;
-            }
-            // - Return sine burst number of cycles (1)
-            virtual const scalar& nc() const
-            {
-                return nc_;
-            }
-
-            virtual  scalar& nc()
-            {
-                return nc_;
-            }
             // - Return actuator radius (m)
             virtual const scalar& ra() const
             {

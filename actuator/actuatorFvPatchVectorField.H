@@ -95,8 +95,6 @@ class actuatorFvPatchVectorField
     // Private Data
         //- reader for pressure data in external file
         autoPtr<Function1<scalar>> pressureFile_;
-        //- reading pressure from file
-        bool readPressure_;
         //- Frequency of sine burst (Hz)
         scalar f0_;
         //- Radius of actuator (m)
@@ -254,12 +252,6 @@ public:
 
         //- Write
         virtual void write(Ostream&) const;
-
-        //- Read from file
-        bool readPressureFromFile()
-        {
-            return readPressure_;
-        }
 };
 
 

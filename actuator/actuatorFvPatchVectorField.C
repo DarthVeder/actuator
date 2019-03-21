@@ -53,26 +53,6 @@ actuatorFvPatchVectorField
     gradient() = Zero;
 }
 
-
-actuatorFvPatchVectorField::
-actuatorFvPatchVectorField
-(
-    const actuatorFvPatchVectorField& tdpvf,
-    const fvPatch& p,
-    const DimensionedField<vector, volMesh>& iF,
-    const fvPatchFieldMapper& mapper
-)
-:
-    fixedGradientFvPatchVectorField(tdpvf, p, iF, mapper),
-    pressureFile_(tdpvf.pressureFile_.clone()),
-    f0_(tdpvf.f0_),
-    ra_(tdpvf.ra_),
-    nc_(tdpvf.nc_),
-    xa_(tdpvf.xa_),
-    fn_tot_(tdpvf.fn_tot_)
-{}
-
-
 actuatorFvPatchVectorField::
 actuatorFvPatchVectorField
 (
@@ -93,20 +73,36 @@ actuatorFvPatchVectorField
     if (dict.found("pressureValue") == 1)
     {
         pressureFile_ = Function1<scalar>::New("pressureValue", dict);
-        readPressure_ = true;
-       // this->evaluate();
     }
     else
     {
         f0_ = readScalar(dict.lookup("f0"));
         nc_ = readScalar(dict.lookup("nc"));
         fn_tot_ = readScalar(dict.lookup("fn_tot"));
-        readPressure_ = false;
     }
 
     fvPatchVectorField::operator=(patchInternalField());
     gradient() = Zero;
 }
+
+actuatorFvPatchVectorField::
+actuatorFvPatchVectorField
+(
+    const actuatorFvPatchVectorField& tdpvf,
+    const fvPatch& p,
+    const DimensionedField<vector, volMesh>& iF,
+    const fvPatchFieldMapper& mapper
+)
+:
+    //fixedGradientFvPatchVectorField(tdpvf, p, iF, mapper),
+    fixedGradientFvPatchVectorField(p, iF), // Don't map
+    pressureFile_(tdpvf.pressureFile_.clone()),
+    f0_(tdpvf.f0_),
+    ra_(tdpvf.ra_),
+    nc_(tdpvf.nc_),
+    xa_(tdpvf.xa_),
+    fn_tot_(tdpvf.fn_tot_)
+{}
 
 
 actuatorFvPatchVectorField::
@@ -223,7 +219,7 @@ void actuatorFvPatchVectorField::updateCoeffs()
     scalar t_burst = nc_/f0_; // s
     scalar pvalue_ = 0.0;
 
-    if (readPressureFromFile())
+    if (pressureFile_.valid())
     {
         pvalue_ = pressureFile_->value(t);
     }
@@ -259,7 +255,7 @@ void actuatorFvPatchVectorField::updateCoeffs()
 void actuatorFvPatchVectorField::write(Ostream& os) const
 {
     fvPatchVectorField::write(os);
-    if (!readPressure_)
+    if (!pressureFile_.valid())
     {
         os.writeKeyword("f0") << f0_ << token::END_STATEMENT << nl;
         os.writeKeyword("nc") << nc_ << token::END_STATEMENT << nl;

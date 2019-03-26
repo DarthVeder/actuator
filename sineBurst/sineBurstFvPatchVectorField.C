@@ -23,7 +23,7 @@ License
 
 \*---------------------------------------------------------------------------*/
 
-#include "actuatorFvPatchVectorField.H"
+#include "sineBurstFvPatchVectorField.H"
 #include "addToRunTimeSelectionTable.H"
 #include "volFields.H"
 
@@ -34,16 +34,17 @@ namespace Foam
 
 // * * * * * * * * * * * * * * * * Constructors  * * * * * * * * * * * * * * //
 
-actuatorFvPatchVectorField::
-actuatorFvPatchVectorField
+sineBurstFvPatchVectorField::
+sineBurstFvPatchVectorField
 (
     const fvPatch& p,
     const DimensionedField<vector, volMesh>& iF
 )
 :
     fixedGradientFvPatchVectorField(p, iF),
-    pressureFile_(),
+    f0_(1.0),
     ra_(1.0),
+    nc_(1.0),
     xa_(Zero),
     fn_tot_(0.0)
 {
@@ -51,8 +52,8 @@ actuatorFvPatchVectorField
     gradient() = Zero;
 }
 
-actuatorFvPatchVectorField::
-actuatorFvPatchVectorField
+sineBurstFvPatchVectorField::
+sineBurstFvPatchVectorField
 (
     const fvPatch& p,
     const DimensionedField<vector, volMesh>& iF,
@@ -60,8 +61,9 @@ actuatorFvPatchVectorField
 )
 :
     fixedGradientFvPatchVectorField(p, iF),
-    pressureFile_(Function1<scalar>::New("pressureValue", dict)),
+    f0_(readScalar(dict.lookup("f0"))),
     ra_(readScalar(dict.lookup("ra"))),
+    nc_(readScalar(dict.lookup("nc"))),
     xa_(vector(dict.lookup("xa"))),
     fn_tot_(readScalar(dict.lookup("fn_tot")))
 {
@@ -69,47 +71,50 @@ actuatorFvPatchVectorField
     gradient() = Zero;
 }
 
-actuatorFvPatchVectorField::
-actuatorFvPatchVectorField
+sineBurstFvPatchVectorField::
+sineBurstFvPatchVectorField
 (
-    const actuatorFvPatchVectorField& tdpvf,
+    const sineBurstFvPatchVectorField& tdpvf,
     const fvPatch& p,
     const DimensionedField<vector, volMesh>& iF,
     const fvPatchFieldMapper& mapper
 )
 :
     fixedGradientFvPatchVectorField(tdpvf, p, iF, mapper),
-    pressureFile_(tdpvf.pressureFile_.clone()),
+    f0_(tdpvf.f0_),
     ra_(tdpvf.ra_),
+    nc_(tdpvf.nc_),
     xa_(tdpvf.xa_),
     fn_tot_(tdpvf.fn_tot_)
 {}
 
 
-actuatorFvPatchVectorField::
-actuatorFvPatchVectorField
+sineBurstFvPatchVectorField::
+sineBurstFvPatchVectorField
 (
-    const actuatorFvPatchVectorField& tdpvf
+    const sineBurstFvPatchVectorField& tdpvf
 )
 :
     fixedGradientFvPatchVectorField(tdpvf),
-    pressureFile_(tdpvf.pressureFile_.clone()),
+    f0_(tdpvf.f0_),
     ra_(tdpvf.ra_),
+    nc_(tdpvf.nc_),
     xa_(tdpvf.xa_),
     fn_tot_(tdpvf.fn_tot_)
 {}
 
 
-actuatorFvPatchVectorField::
-actuatorFvPatchVectorField
+sineBurstFvPatchVectorField::
+sineBurstFvPatchVectorField
 (
-    const actuatorFvPatchVectorField& tdpvf,
+    const sineBurstFvPatchVectorField& tdpvf,
     const DimensionedField<vector, volMesh>& iF
 )
 :
     fixedGradientFvPatchVectorField(tdpvf, iF),
-    pressureFile_(tdpvf.pressureFile_.clone()),
+    f0_(tdpvf.f0_),
     ra_(tdpvf.ra_),
+    nc_(tdpvf.nc_),
     xa_(tdpvf.xa_),
     fn_tot_(tdpvf.fn_tot_)
 {}
@@ -117,7 +122,7 @@ actuatorFvPatchVectorField
 
 // * * * * * * * * * * * * * * * Member Functions  * * * * * * * * * * * * * //
 
-void actuatorFvPatchVectorField::autoMap
+void sineBurstFvPatchVectorField::autoMap
 (
     const fvPatchFieldMapper& m
 )
@@ -126,7 +131,7 @@ void actuatorFvPatchVectorField::autoMap
 }
 
 
-void actuatorFvPatchVectorField::rmap
+void sineBurstFvPatchVectorField::rmap
 (
     const fvPatchVectorField& ptf,
     const labelList& addr
@@ -136,7 +141,7 @@ void actuatorFvPatchVectorField::rmap
 }
 
 
-void actuatorFvPatchVectorField::updateCoeffs()
+void sineBurstFvPatchVectorField::updateCoeffs()
 {
     if (updated())
     {
@@ -160,6 +165,7 @@ void actuatorFvPatchVectorField::updateCoeffs()
     scalarField lambda(nu*E/((1.0 + nu)*(1.0 - 2.0*nu)));
     scalarField threeK(E/(1.0 - 2.0*nu));
     scalar t = db().time().value();
+    const scalar pi = constant::mathematical::pi;
 
     if (mechanicalProperties.get<bool>("planeStress"))
     {
@@ -192,13 +198,19 @@ void actuatorFvPatchVectorField::updateCoeffs()
             As += Sf_[i];
         }
     }
-    if (As == 0.0)
+    if (As == 0) 
     {
         As = GREAT;
         active = 0;
     }
+    scalar t_burst = nc_/f0_; // s
+    scalar pvalue_ = 0.0;
 
-    const scalar pvalue_ = (active*fn_tot_/As) * pressureFile_->value(t);
+    if (t<=t_burst)
+    {
+        pvalue_ = (active*fn_tot_/As) * sin(2.0*pi*f0_*t) * pow(sin(pi*t/t_burst),2.0);
+    }
+
     forAll(Cf_, i)
     {
     	if (dist_Cf_xa[i] <= ra_)
@@ -220,12 +232,13 @@ void actuatorFvPatchVectorField::updateCoeffs()
 }
 
 
-void actuatorFvPatchVectorField::write(Ostream& os) const
+void sineBurstFvPatchVectorField::write(Ostream& os) const
 {
 
     fvPatchVectorField::write(os);
+    os.writeKeyword("f0") << f0_ << token::END_STATEMENT << nl;
+    os.writeKeyword("nc") << nc_ << token::END_STATEMENT << nl;
     os.writeKeyword("fn_tot") << fn_tot_ << token::END_STATEMENT << nl;
-    pressureFile_->writeData(os);
     os.writeKeyword("ra") << ra_ << token::END_STATEMENT << nl;
     os.writeKeyword("xa") << xa_ << token::END_STATEMENT << nl;
     writeEntry("value", os);
@@ -237,7 +250,7 @@ void actuatorFvPatchVectorField::write(Ostream& os) const
 makePatchTypeField
 (
     fvPatchVectorField,
-    actuatorFvPatchVectorField
+    sineBurstFvPatchVectorField
 );
 
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //

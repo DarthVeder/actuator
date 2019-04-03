@@ -28,9 +28,7 @@ Description
     Actuator force acting normal (p*n) to the patch and defined  as a pressure 
     sine burst.
     It is modelled as a circular disk (pi*ra_^2) on the patch with position xa_
-    and radius ra_. The sine burst requires f0 and nc. The actual area is computed
-    at run time, to allow for smaller sections of the actuator being present on the 
-    patch. 
+    and radius ra_. The sine burst requires f0 and nc. 
 
     Boundary format for sine burst:
     
@@ -39,7 +37,7 @@ Description
         type            sineBurst;
         f0              20000; // (Hz)
         nc              4; // (1)
-        fn_tot          -1; // (N), total force. (+) is parallel with the normal() 
+        fn_tot          -1; // (Pa), maximum pressure. (+) is parallel with the normal() 
         ra              0.019478; // disk radius, (m)
         xa              ( 0 0.0031 0.0015 ); // disk center, (m)
         value           uniform (0 0 0);
@@ -78,7 +76,7 @@ class sineBurstFvPatchVectorField
         scalar nc_;
         //- Position of the actuator center
         vector xa_;
-        //- Maximum force (N)
+        //- Maximum pressure (Pa)
         scalar fn_tot_;
 
 public:

@@ -27,8 +27,7 @@ Class
 Description
     Actuator force acting normal (p*n) to the patch with p read from a file. 
     It is modelled as a circular disk (pi*ra_^2) on the patch with position xa_
-    and radius ra_. The actual area is computed at run time, to allow for smaller 
-    sections of the actuator being present on the patch. 
+    and radius ra_. 
 
     Boundary format for file:
     patch_name
@@ -83,8 +82,8 @@ class actuatorFvPatchVectorField
         scalar ra_;
         //- Position of the actuator center
         vector xa_;
-        //- Maximum force (N)
-        scalar fn_tot_;
+        //- Maximum pressure (Pa)
+        scalar pn_max_;
 
 public:
 
@@ -182,12 +181,12 @@ public:
             // - Return maximum normal force (N)
             virtual const scalar& fnMax() const
             {
-                return fn_tot_;
+                return pn_max_;
             }
 
             virtual  scalar& fnMax()
             {
-                return fn_tot_;
+                return pn_max_;
             }
 
 
